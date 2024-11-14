@@ -1,4 +1,4 @@
-# Memory's Windows Installation Media Utility 🚀
+# Memory's Windows Installation Media Utility 🧰
 The **Windows Installation Media Utility** (*not .WIM - Windows Imaging Format Utility*) is a simple tool designed to help optimize and customize Windows Installation Media, streamlining your Windows installs.
 
 Contributions to this project are welcome! However, please understand that I prefer to develop and work on these projects independently. I do value other people's insights and appreciate any feedback, so don't take it personally if a pull request is not accepted.
