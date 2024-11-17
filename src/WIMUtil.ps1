@@ -3,9 +3,8 @@ If (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     Try {
         Start-Process PowerShell.exe -ArgumentList ("-NoProfile -ExecutionPolicy Bypass -File `"{0}`"" -f $PSCommandPath) -Verb RunAs
         Exit
-    }
-    Catch {
-        Write-Host "Failed to run as Administrator. Please rerun with elevated privileges."
+    } Catch {
+        Write-Host "Failed to run as Administrator. Please rerun with elevated privileges." -ForegroundColor Red
         Exit
     }
 }
@@ -33,13 +32,62 @@ function SetStatusText {
 
 $script:currentScreenIndex = 1
 
-# URL to the XAML file on GitHub
-$xamlUrl = "https://github.com/memstechtips/WIMUtil/raw/main/xaml/WIMUtilGUI.xaml"
+# Fix Internet Explorer Engine is Missing to Ensure GUI Launches
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main" -Name "DisableFirstRunCustomize" -Value 2 -Force
 
-# Download and load the XAML content
+# Explicitly define the configuration URL for the branch to use (commenting out the one not to use depending on branch)
+$configUrl = "https://raw.githubusercontent.com/memstechtips/WIMUtil/main/config/wimutil-settings.json"  # Main branch
+# $configUrl = "https://raw.githubusercontent.com/memstechtips/WIMUtil/dev/config/wimutil-settings.json"   # Dev branch
+
+Write-Host "Using Configuration URL: $configUrl" -ForegroundColor Cyan
+
+# Determine branch from the configuration URL
+$currentBranch = "unknown"  # Fallback value
+if ($configUrl -match "https://raw.githubusercontent.com/memstechtips/WIMUtil/([^/]+)/config/wimutil-settings.json") {
+    $currentBranch = $matches[1]
+    Write-Host "Branch detected from Configuration URL: $currentBranch" -ForegroundColor Green
+} else {
+    Write-Host "Unable to detect branch from Configuration URL. Using fallback." -ForegroundColor Yellow
+}
+
+Write-Host "Using branch: $currentBranch" -ForegroundColor Cyan
+
+# Load the configuration from the specified URL
 try {
+    $config = (Invoke-WebRequest -Uri $configUrl -ErrorAction Stop).Content | ConvertFrom-Json
+    Write-Host "Configuration loaded successfully from $configUrl" -ForegroundColor Green
+} catch {
+    Write-Host "Failed to load configuration from URL: $configUrl" -ForegroundColor Red
+    exit 1
+}
+
+# Fetch settings for the current branch
+$branchConfig = $config.$currentBranch
+if (-not $branchConfig) {
+    Write-Host "Branch $currentBranch not found in configuration file. Exiting script." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Branch settings successfully loaded for: $currentBranch" -ForegroundColor Cyan
+
+# Extract configuration settings
+$xamlUrl = $branchConfig.xamlUrl
+$oscdimgURL = $branchConfig.oscdimgURL
+$expectedHash = $branchConfig.expectedHash
+
+# Validate that required keys are present in the configuration
+if (-not ($xamlUrl -and $oscdimgURL -and $expectedHash)) {
+    Write-Host "Configuration file is missing required settings. Exiting script." -ForegroundColor Red
+    exit 1
+}
+
+# Load XAML GUI
+try {
+    if (-not $xamlUrl) {
+        throw "XAML URL is not set in the configuration."
+    }
     # Download XAML content as a string
-    $xamlContent = (Invoke-WebRequest -Uri $xamlUrl).Content
+    $xamlContent = (Invoke-WebRequest -Uri $xamlUrl -ErrorAction Stop).Content
 
     # Load the XAML using XamlReader.Load with a MemoryStream
     $encoding = [System.Text.Encoding]::UTF8
@@ -52,12 +100,11 @@ try {
 
     # Clean up stream
     $xamlStream.Close()
-}
-catch {
+    Write-Host "XAML GUI loaded successfully." -ForegroundColor Green
+} catch {
     Write-Host "Error loading XAML from URL: $($_.Exception.Message)" -ForegroundColor Red
-    $readerOperationSuccessful = $false
+    exit 1
 }
-
 
 # Define the drag behavior for the window
 function Window_MouseLeftButtonDown {
@@ -79,7 +126,6 @@ function Update-ProgressIndicator {
     $ProgressStep3.Fill = if ($currentScreen -ge 3) { "#FFDE00" } else { "#FFEB99" }
     $ProgressStep4.Fill = if ($currentScreen -ge 4) { "#FFDE00" } else { "#FFEB99" }
 }
-
 
 # Check if XAML loaded successfully
 if ($readerOperationSuccessful) {
@@ -433,12 +479,6 @@ if ($readerOperationSuccessful) {
         [System.Windows.Forms.Application]::DoEvents()
     }
 
-
-    # Define expected hash and signing date of oscdimg.exe file to determine if it's been tampered with
-    # Note: Different versions of oscdimg.exe will have different hashes and signing dates
-    $expectedHash = "CACD23ABCD1E1B791F6280D7D86270FF8D4144728FF611033BAF5599D883731B"
-    $expectedSignDate = [datetime]"2023-10-19T21:51:12" 
-
     # Function to get the SHA-256 hash of a file
     function Get-FileHashValue {
         param (
@@ -448,34 +488,6 @@ if ($readerOperationSuccessful) {
         if (Test-Path -Path $filePath) {
             $hashObject = Get-FileHash -Path $filePath -Algorithm SHA256
             return $hashObject.Hash
-        }
-        else {
-            Write-Host "File not found at path: $filePath"
-            return $null
-        }
-    }
-
-    # Function to get the signing date of a file
-    function Get-SignatureDate {
-        param (
-            [string]$filePath
-        )
-
-        if (Test-Path -Path $filePath) {
-            try {
-                $signature = Get-AuthenticodeSignature -FilePath $filePath
-                if ($signature.Status -eq 'Valid') {
-                    return $signature.SignerCertificate.NotBefore
-                }
-                else {
-                    Write-Host "The file's digital signature is not valid."
-                    return $null
-                }
-            }
-            catch {
-                Write-Host "Error retrieving the signature date: $_"
-                return $null
-            }
         }
         else {
             Write-Host "File not found at path: $filePath"
@@ -501,61 +513,49 @@ if ($readerOperationSuccessful) {
         [System.Windows.Forms.Application]::DoEvents()  # Refresh the UI
     }
 
-    # Function to download and validate oscdimg
-    function DownloadOscdimg {
-        SetStatusText -message "Preparing to download oscdimg..." -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
-        [System.Windows.Forms.Application]::DoEvents()
+# Function to download and validate oscdimg
+function DownloadOscdimg {
+    SetStatusText -message "Preparing to download oscdimg..." -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
+    [System.Windows.Forms.Application]::DoEvents()
 
-        $oscdimgURL = "https://github.com/memstechtips/WIMUtil/raw/main/assets/executables/oscdimg.exe"
-        $adkOscdimgPath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg"
-        $oscdimgFullPath = Join-Path -Path $adkOscdimgPath -ChildPath "oscdimg.exe"
+    $adkOscdimgPath = "C:\Program Files (x86)\Windows Kits\10\Assessment and Deployment Kit\Deployment Tools\amd64\Oscdimg"
+    $oscdimgFullPath = Join-Path -Path $adkOscdimgPath -ChildPath "oscdimg.exe"
 
-        # Ensure the ADK directory exists
-        if (!(Test-Path -Path $adkOscdimgPath)) {
-            New-Item -ItemType Directory -Path $adkOscdimgPath -Force | Out-Null
-            SetStatusText -message "Created directory for oscdimg at: $adkOscdimgPath" -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
-            [System.Windows.Forms.Application]::DoEvents()
-        }
-
-        # Download oscdimg to the ADK path
-        try {
-            SetStatusText -message "Downloading oscdimg to $adkOscdimgPath..." -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
-            [System.Windows.Forms.Application]::DoEvents()
-
-        (New-Object System.Net.WebClient).DownloadFile($oscdimgURL, $oscdimgFullPath)
-            SetStatusText -message "oscdimg downloaded successfully." -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
-
-            # Verify the file's hash
-            $actualHash = Get-FileHashValue -filePath $oscdimgFullPath
-            if ($actualHash -ne $expectedHash) {
-                SetStatusText -message "Hash mismatch! oscdimg may not be from Microsoft." -color $Script:ErrorColor -textBlock ([ref]$CreateISOStatusText)
-                Write-Host "Expected Hash: $expectedHash"
-                Write-Host "Actual Hash: $actualHash"
-                Remove-Item -Path $oscdimgFullPath -Force
-                return
-            }
-
-            # Verify the file's signature date
-            $actualSignDate = Get-SignatureDate -filePath $oscdimgFullPath
-            if ($actualSignDate -ne $expectedSignDate) {
-                SetStatusText -message "Signature date mismatch! oscdimg may not be from Microsoft." -color $Script:ErrorColor -textBlock ([ref]$CreateISOStatusText)
-                Write-Host "Expected Sign Date: $expectedSignDate"
-                Write-Host "Actual Sign Date: $actualSignDate"
-                Remove-Item -Path $oscdimgFullPath -Force
-                return
-            }
-
-            # File is valid, enable the Create ISO button
-            SetStatusText -message "oscdimg verified and ready for use." -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
-            $GetoscdimgButton.IsEnabled = $false
-            $CreateISOButton.IsEnabled = $true
-        }
-        catch {
-            SetStatusText -message "Failed to download oscdimg: $($_.Exception.Message)" -color $Script:ErrorColor -textBlock ([ref]$CreateISOStatusText)
-        }
-
+    # Ensure the ADK directory exists
+    if (!(Test-Path -Path $adkOscdimgPath)) {
+        New-Item -ItemType Directory -Path $adkOscdimgPath -Force | Out-Null
+        SetStatusText -message "Created directory for oscdimg at: $adkOscdimgPath" -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
         [System.Windows.Forms.Application]::DoEvents()
     }
+
+    # Download oscdimg to the ADK path
+    try {
+        SetStatusText -message "Downloading oscdimg from: $oscdimgURL" -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
+        [System.Windows.Forms.Application]::DoEvents()
+
+        (New-Object System.Net.WebClient).DownloadFile($oscdimgURL, $oscdimgFullPath)
+        Write-Host "oscdimg downloaded successfully from: $oscdimgURL"
+
+        # Verify the file's hash
+        $actualHash = Get-FileHashValue -filePath $oscdimgFullPath
+        if ($actualHash -ne $expectedHash) {
+            SetStatusText -message "Hash mismatch! oscdimg may not be from Microsoft." -color $Script:ErrorColor -textBlock ([ref]$CreateISOStatusText)
+            Write-Host "Expected Hash: $expectedHash"
+            Write-Host "Actual Hash: $actualHash"
+            Remove-Item -Path $oscdimgFullPath -Force
+            return
+        }
+
+        # File is valid, enable the Create ISO button
+        SetStatusText -message "oscdimg verified and ready for use." -color $Script:SuccessColor -textBlock ([ref]$CreateISOStatusText)
+        $GetoscdimgButton.IsEnabled = $false
+        $CreateISOButton.IsEnabled = $true
+    } catch {
+        SetStatusText -message "Failed to download oscdimg: $($_.Exception.Message)" -color $Script:ErrorColor -textBlock ([ref]$CreateISOStatusText)
+    }
+
+    [System.Windows.Forms.Application]::DoEvents()
+}
 
     # Define the location selection function
     function SelectNewISOLocation {
@@ -618,7 +618,6 @@ if ($readerOperationSuccessful) {
     $GetoscdimgButton.Add_Click({ DownloadOscdimg })
     $SelectISOLocationButton.Add_Click({ SelectNewISOLocation })
     $CreateISOButton.Add_Click({ CreateISO })
-
 
     # Event handler for the Next button
     # Next button to navigate to the next screen
