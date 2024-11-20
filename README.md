@@ -11,10 +11,11 @@ Contributions to this project are welcome! However, please understand that I pre
 
 > [!NOTE]
 > This tool is currently in alpha, and it's a work in progress. Any issues can be reported using the Issues tab.
+> Also, I'm not a developer, I'm just enjoying playing around and learning as I go.
 
 ### Versions
 
-[![Latest Version](https://img.shields.io/badge/Version-0.0.2Alpha%20Latest-0078D4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/memstechtips/WIMUtil/releases/tag/v0.0.2)
+[![Latest Version](https://img.shields.io/badge/Version-0.0.3Alpha%20Latest-0078D4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/memstechtips/WIMUtil/releases/tag/v0.0.3)
 
 ### Support the Project
 
