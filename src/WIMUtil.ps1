@@ -37,14 +37,14 @@ $script:currentScreenIndex = 1
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Internet Explorer\Main" -Name "DisableFirstRunCustomize" -Value 2 -Force
 
 # Explicitly define the configuration URL for the branch to use (commenting out the one not to use depending on branch)
-$configUrl = "https://raw.githubusercontent.com/memstechtips/WIMUtil/main/config/wimutil-settings.json"  # Main branch
-# $configUrl = "https://raw.githubusercontent.com/memstechtips/WIMUtil/dev/config/wimutil-settings.json"   # Dev branch
+$configUrl = "https://raw.githubusercontent.com/skkylimits/WIMUtil/main/config/wimutil-settings.json"  # Main branch
+# $configUrl = "https://raw.githubusercontent.com/skkylimits/WIMUtil/dev/config/wimutil-settings.json"   # Dev branch
 
 Write-Host "Using Configuration URL: $configUrl" -ForegroundColor Cyan
 
 # Determine branch from the configuration URL
 $currentBranch = "unknown"  # Fallback value
-if ($configUrl -match "https://raw.githubusercontent.com/memstechtips/WIMUtil/([^/]+)/config/wimutil-settings.json") {
+if ($configUrl -match "https://raw.githubusercontent.com/skkylimits/WIMUtil/([^/]+)/config/wimutil-settings.json") {
     $currentBranch = $matches[1]
     Write-Host "Branch detected from Configuration URL: $currentBranch" -ForegroundColor Green
 }
@@ -505,17 +505,17 @@ if ($readerOperationSuccessful) {
     
     
 
-    # Download UnattendedWinstall XML File function
+    # Download autounattend XML File function
     function DownloadUWXML {
-        SetStatusText -message "Downloading the latest UnattendedWinstall XML file..." -color $Script:SuccessColor -textBlock ([ref]$AddXMLStatusText)
+        SetStatusText -message "Downloading the latest autounattend XML file..." -color $Script:SuccessColor -textBlock ([ref]$AddXMLStatusText)
         RefreshGUI
     
-        $url = "https://github.com/memstechtips/UnattendedWinstall/raw/main/autounattend.xml"
+        $url = "https://github.com/skkylimits/autounattend/raw/main/autounattend.xml"
         $destination = Join-Path -Path $Script:WorkingDirectory -ChildPath "autounattend.xml"
     
         try {
             (New-Object System.Net.WebClient).DownloadFile($url, $destination)
-            SetStatusText -message "Latest UnattendedWinstall XML file added. Click Next to Continue." -color $Script:SuccessColor -textBlock ([ref]$AddXMLStatusText)
+            SetStatusText -message "Latest autounattend XML file added. Click Next to Continue." -color $Script:SuccessColor -textBlock ([ref]$AddXMLStatusText)
     
             # Update the DownloadUWTextBox content with the success message
             $DownloadUWTextBox.Text = "Answer file added to: $destination"

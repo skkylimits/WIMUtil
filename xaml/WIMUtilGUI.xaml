@@ -41,9 +41,9 @@
             <Style.Triggers>
                 <!--  Hover State for Enabled Button  -->
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#FFDE00" />
+                    <Setter Property="Background" Value="red" />
                     <Setter Property="Foreground" Value="Black" />
-                    <Setter Property="BorderBrush" Value="#FFDE00" />
+                    <Setter Property="BorderBrush" Value="red" />
                 </Trigger>
                 <!--  Disabled State  -->
                 <Trigger Property="IsEnabled" Value="False">
@@ -96,7 +96,7 @@
                         FontSize="12"
                         FontStyle="Italic"
                         Foreground="Gray"
-                        Text="by Memory" />
+                        Text="by skkylimits" />
                 </TextBlock>
             </DockPanel>
             <!--  Close Button in Top-Right Corner  -->
